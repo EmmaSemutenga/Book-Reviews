@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block content %}
+        <li>{{ book.isbn }}</li>
+        <li>{{ book.title }}</li>
+        <li>{{ book.author }}</li>
+        <li>{{ book.year }}</li>
+        <hr>
+
+        <h2>GoodReads Website Reviews</h2>
+        {% if good_reviews %}
+        <ul>
+                {% for good_review in good_reviews %}
+                        <li>Average rating -- {{ good_review.average_rating }}</li>
+                        <li>Number of ratings -- {{ good_review.ratings_count }}</li>
+                {% endfor %}
+        </ul>
+        {% endif %}
+        <h2>Website Reviews</h2>
+        <!--To be inserted here -->
+        {% if reviews %}
+        <ul>
+                {% for review in reviews %}
+                        <li>{{ review.comment }}</li>
+                        <li>{{ review.rating }}</li>
+                        <li>Review By - {{ review.reviewer.username }}</li>
+                {% endfor %}
+        </ul>
+        {% else %}
+                <h2>No Reviews on this book</h2>
+        {% endif %}
+        <h2>Review Book</h2>
+        <form action="" method="POST" novalidate>
+                {{ form.hidden_tag() }}
+                {{ form.comment.label }}{{ form.comment() }}<br>
+                {{ form.rating.label }}{{ form.rating(size="2") }}<br>
+                {{ form.submit }}
+        </form>
+        <h2>{{ user_review }}</h2>
+{% endblock %}

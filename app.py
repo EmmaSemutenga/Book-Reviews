@@ -1,12 +1,12 @@
-from flask import Flask, render_template, redirect, url_for, flash, request
+from flask import Flask, render_template, redirect, url_for, flash, request, jsonify
 import requests
 import csv
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from datetime import datetime
 from flask_wtf import FlaskForm
-from wtforms import StringField, SubmitField, PasswordField, BooleanField, TextAreaField
-from wtforms.validators import DataRequired, Length, Email, EqualTo
+from wtforms import StringField, SubmitField, PasswordField, BooleanField, TextAreaField, IntegerField
+from wtforms.validators import DataRequired, Length, Email, EqualTo, NumberRange
 from flask_bcrypt import Bcrypt
 from flask_login import UserMixin, LoginManager, login_user, current_user, logout_user, login_required
 
@@ -15,7 +15,7 @@ app.config['SECRET_KEY']="get yours"
 POSTGRES = {
     'user': 'postgres',
     'pw': 'tunga',
-    'db': 'project1',
+    'db': 'bok',
     'host': 'localhost',
     'port': '5432',
 }
@@ -58,7 +58,7 @@ class Review(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     date_posted = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     comment = db.Column(db.Text, nullable=False)
-    rating = db.Column(db.String(100), nullable=False)
+    rating = db.Column(db.Integer, nullable=False)
     book_id = db.Column(db.Integer, db.ForeignKey('book.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
@@ -79,7 +79,7 @@ class LoginForm(FlaskForm):
 
 class ReviewForm(FlaskForm):
     comment = TextAreaField('Comment', validators=[DataRequired()])
-    rating = StringField('Rating', validators=[DataRequired(), Length(max=1)])
+    rating = IntegerField('Rating', validators=[DataRequired(), NumberRange(min=1, max=5)])
     submit = SubmitField('Review')
 
 class SearchForm(FlaskForm):
@@ -124,35 +124,70 @@ def books():
     if form.validate_on_submit():
         search = form.search.data
         #books = select(Book).where((isbn == search) or (title == search) or (author == search))
-        books = Book.query.filter_by(isbn=search).all() or Book.query.filter_by(title=search).all() or Book.query.filter_by(author=search).all() or Book.query.filter_by(year=search).all()
+        #books = Book.query.filter_by(isbn=search).all() or Book.query.filter_by(title=search).all() or Book.query.filter_by(author=search).all() or Book.query.filter_by(year=search).all()
         #books = Book.query.filter(Book.title.endswith(search)).all()
         #books = Book.query.filter(Book.title.contains(search)).all() or Book.query.filter(Book.isbn.contains(search)).all() or Book.query.filter(Book.author.contains(search)).all()
+        books = Book.query.filter((Book.isbn == search) | (Book.title == search) | (Book.author == search) | (Book.year == search))
+        books = Book.query.filter((Book.isbn.contains(search)) | (Book.title.contains(search)) | (Book.author.contains(search)) | (Book.year.contains(search)))
         return render_template('books.html', books = books, form=form)
     books = Book.query.all()
     return render_template('books.html', books = books, form=form)
 
-# @app.route("/book/<int:book_id>")
-# @login_required
-# def post(book_id):
-#     book = Book.query.filter_by(id=book_id).first()
-#     reviews = Review.query.filter_by(id=book_id)
-#     return render_template('book.html', book = book,reviews = reviews)
-
-
-@app.route("/")
-def home():
-    res = requests.get("https://www.goodreads.com/book/review_counts.json", params={"key": "tIS1YZZIEro0z5j190aXzw", "isbns": "9781632168146"})
+@app.route("/book/<int:book_id>", methods=['GET', 'POST'])
+@login_required
+def book(book_id):
+    book = Book.query.filter_by(id=book_id).first()
+    reviews = Review.query.filter_by(book_id=book_id).all()
+    #goodreads website reviews
+    res = requests.get("https://www.goodreads.com/book/review_counts.json", params={"key": "tIS1YZZIEro0z5j190aXzw", "isbns": book.isbn})
     if res.status_code != 200:
         raise Exception("Error: API request unsuccessful.")
-    return str(res.json())
-    #return "Hello World"
+    good_reviews = res.json()['books']
+    #check if user has reviewed this book before
+    user_review = Review.query.filter_by(reviewer = current_user, book_id=book_id).first()
+    form = ReviewForm()
+    #if user_review is None:
+    if not user_review:
+        if form.validate_on_submit():
+            review = Review(comment = form.comment.data, rating = form.rating.data, book_id = book_id, reviewer = current_user )
+            db.session.add(review)
+            db.session.commit()
+            return redirect(url_for('book', book_id=book_id))
+    #return render_template('book.html', book = book,reviews = reviews)
+    return render_template('book.html', book = book, form=form, reviews = reviews, user_review = user_review, good_reviews = good_reviews)
 
-@app.route("/place")
-def place():
-    res = requests.get("https://jsonplaceholder.typicode.com/todos/1")
-    if res.status_code != 200:
-        raise Exception("Error: API request unsuccessful.")
-    return str(res.json())
+@app.route("/api/<isbn>")
+def isbn_api(isbn):
+    book = Book.query.filter_by(isbn=isbn).first()
+    reviews = book.reviews
+    review_count = len(reviews)
+    #average_score = accumulated number of ratings/review_count
+    if book is None:
+        return jsonify({"error" : "Invalid isbn"}), 422
+
+    return jsonify({
+        "title": book.title,
+        "author": book.author,
+        "year": book.year,
+        "isbn": book.isbn,
+        "review_count": review_count
+    })
+    
+
+# @app.route("/")
+# def home():
+#     res = requests.get("https://www.goodreads.com/book/review_counts.json", params={"key": "tIS1YZZIEro0z5j190aXzw", "isbns": "9781632168146"})
+#     if res.status_code != 200:
+#         raise Exception("Error: API request unsuccessful.")
+#     return str(res.json())
+#     #return "Hello World"
+
+# @app.route("/place")
+# def place():
+#     res = requests.get("https://jsonplaceholder.typicode.com/todos/1")
+#     if res.status_code != 200:
+#         raise Exception("Error: API request unsuccessful.")
+#     return str(res.json())
 
 #imports data from csv
 # @app.route("/download")
@@ -164,3 +199,18 @@ def place():
 #         db.session.add(book)
 #     db.session.commit()
 #     return "Hooray"
+
+# {
+#     'books': [{
+#         'id': 29207858, 
+#         'isbn': '1632168146', 
+#         'isbn13': '9781632168146', 
+#         'ratings_count': 0, 
+#         'reviews_count': 2, 
+#         'text_reviews_count': 0, 
+#         'work_ratings_count': 26, 
+#         'work_reviews_count': 119, 
+#         'work_text_reviews_count': 10, 
+#         'average_rating': '4.04'
+#         }]
+# }

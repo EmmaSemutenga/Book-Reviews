@@ -7,7 +7,7 @@
     </form>
 
     {% for book in books %}
-        <li><a href="">Book - {{ book.id }} </a></li>
+        <li><a href="{{ url_for('book', book_id=book.id) }}">Book - {{ book.id }} </a></li>
         <li>{{ book.isbn }}</li>
         <li>{{ book.title }}</li>
         <li>{{ book.year }}</li>
