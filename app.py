@@ -82,6 +82,10 @@ class ReviewForm(FlaskForm):
     rating = StringField('Rating', validators=[DataRequired(), Length(max=1)])
     submit = SubmitField('Review')
 
+class SearchForm(FlaskForm):
+    search = StringField('ISBN, Title or Author', validators=[DataRequired(), Length(min=2, max=20)])
+    submit = SubmitField('Search')
+
 #routes
 @app.route("/", methods=['GET', 'POST'])
 def register():
@@ -102,7 +106,7 @@ def login():
         user = User.query.filter_by(email=form.email.data).first()
         if user and bcrypt.check_password_hash(user.password, form.password.data):
             login_user(user, remember=form.remember.data)
-            return redirect(url_for('home'))        
+            return redirect(url_for('books'))        
         else:
             return "wrong password"
     return render_template('login.html', form = form)
@@ -112,6 +116,27 @@ def login():
 def logout():
     logout_user()
     return redirect(url_for('home'))
+
+@app.route("/books", methods=['GET', 'POST'])
+@login_required
+def books():
+    form = SearchForm()
+    if form.validate_on_submit():
+        search = form.search.data
+        #books = select(Book).where((isbn == search) or (title == search) or (author == search))
+        books = Book.query.filter_by(isbn=search).all() or Book.query.filter_by(title=search).all() or Book.query.filter_by(author=search).all() or Book.query.filter_by(year=search).all()
+        #books = Book.query.filter(Book.title.endswith(search)).all()
+        #books = Book.query.filter(Book.title.contains(search)).all() or Book.query.filter(Book.isbn.contains(search)).all() or Book.query.filter(Book.author.contains(search)).all()
+        return render_template('books.html', books = books, form=form)
+    books = Book.query.all()
+    return render_template('books.html', books = books, form=form)
+
+# @app.route("/book/<int:book_id>")
+# @login_required
+# def post(book_id):
+#     book = Book.query.filter_by(id=book_id).first()
+#     reviews = Review.query.filter_by(id=book_id)
+#     return render_template('book.html', book = book,reviews = reviews)
 
 
 @app.route("/")
