@@ -1,3 +1,4 @@
+#imports
 from flask import Flask, render_template, redirect, url_for, flash, request, jsonify
 import requests
 import csv
@@ -10,6 +11,7 @@ from wtforms.validators import DataRequired, Length, Email, EqualTo, NumberRange
 from flask_bcrypt import Bcrypt
 from flask_login import UserMixin, LoginManager, login_user, current_user, logout_user, login_required
 
+#configurations
 app = Flask(__name__)
 app.config['SECRET_KEY']="get yours"
 POSTGRES = {
@@ -30,11 +32,13 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
+#Loading user on the fly
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(user_id)
 
 #models
+#User Models
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(20), unique=True, nullable=False)
@@ -43,17 +47,17 @@ class User(db.Model, UserMixin):
     #posts = db.relationship('Post', backref='author', lazy=True, cascade="all, delete-orphan")#this is a relationship not a column
     reviews = db.relationship('Review', backref='reviewer', lazy=True, cascade="all, delete-orphan")#this is a relationship not a column
 
-
+#book model
 class Book(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     isbn = db.Column(db.String(100), nullable=False)
     title = db.Column(db.String(100), nullable=False)
     author = db.Column(db.String(100), nullable=False)
-    year = db.Column(db.String(100), nullable=False)
+    year = db.Column(db.Integer, nullable=False)
     #user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     reviews = db.relationship('Review', backref='author', lazy=True, cascade="all, delete-orphan")#this is a relationship not a column
 
-
+#review model
 class Review(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     date_posted = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
@@ -127,7 +131,7 @@ def books():
         #books = Book.query.filter_by(isbn=search).all() or Book.query.filter_by(title=search).all() or Book.query.filter_by(author=search).all() or Book.query.filter_by(year=search).all()
         #books = Book.query.filter(Book.title.endswith(search)).all()
         #books = Book.query.filter(Book.title.contains(search)).all() or Book.query.filter(Book.isbn.contains(search)).all() or Book.query.filter(Book.author.contains(search)).all()
-        books = Book.query.filter((Book.isbn == search) | (Book.title == search) | (Book.author == search) | (Book.year == search))
+        #books = Book.query.filter((Book.isbn == search) | (Book.title == search) | (Book.author == search) | (Book.year == search))
         books = Book.query.filter((Book.isbn.contains(search)) | (Book.title.contains(search)) | (Book.author.contains(search)) | (Book.year.contains(search)))
         return render_template('books.html', books = books, form=form)
     books = Book.query.all()
@@ -159,11 +163,12 @@ def book(book_id):
 @app.route("/api/<isbn>")
 def isbn_api(isbn):
     book = Book.query.filter_by(isbn=isbn).first()
-    reviews = book.reviews
-    review_count = len(reviews)
     #average_score = accumulated number of ratings/review_count
     if book is None:
         return jsonify({"error" : "Invalid isbn"}), 422
+    #only check for reviews if book exist
+    reviews = book.reviews
+    review_count = len(reviews)
 
     return jsonify({
         "title": book.title,
